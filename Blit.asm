@@ -23,6 +23,210 @@ blit_dest_bytewidth		equ		pf2_bufferx/8-2
 
 *****************************************************************
 *																*
+*			Blitter Resource									*
+*																*
+*****************************************************************
+*
+*
+*Struct:
+*		- Address of Blitter Draw stack
+*			- address current
+*			- address buffers
+*			- size (no blits)
+*			- to be drawn
+*			- current frame
+*			- can only be swapped when br_stack_draw = 0
+*
+		STRUCTURE	blitter_resource,0
+			APTR	br_stack_base_current		Base to add new blits to
+			APTR	br_stack_base0
+			APTR	br_stack_base1
+			WORD	br_stack_size				Size of stack
+			WORD	br_stack_count				Count of new blits
+			APTR	br_stack_draw				Address for next draw
+			APTR	br_stack_new				Address of last new blit
+			LABEL	br_SIZEOF
+
+*****************************************************************
+*																*
+*			Blitter Pipeline									*
+*																*
+*****************************************************************
+*
+*
+
+*****************************************************************
+*
+*Name:	Blitter_Interrupt
+*
+*Function:
+*		Executes next Blitter operation on stack
+*Assumed:
+*		a0 = Program Base
+*Method:
+*		- gets stack control struct
+*		- check not/done all in stack
+*		- gets next blit reg struct
+*		- loads blitter
+*		- updates next blit/set done all if req
+*
+*Structs:
+*		blitter registers
+*		- copies of data for registers (long)
+*		- address of next struct (addr)
+*
+		STRUCTURE	blitter_registers,0
+			LONG	bb_bltcon				H=bltcon0 L=bltcon1
+			LONG	bb_bltawm				H=bltafwm L=bltalwm
+			LONG	bb_bltcpt
+			LONG	bb_bltbpt
+			LONG	bb_bltapt
+			LONG	bb_bltdpt
+			LONG	bb_bltcbmod				H=bltcmod L=bltbmod
+			LONG	bb_bltadmod				H=bltamod L=bltdmod
+			WORD	bb_bltsize				Starts Blit
+			APTR	bb_next
+			LABEL	bb_SIZEOF
+
+Blitter_Interrupt:
+* a0 = Program Base
+* a1 = Blitter resourse
+* a2 = Blit
+* a6 = custom base
+*		
+		move.l		p_BlitRes(a0),a1
+
+		move.l		br_stack_draw(a1),a2
+		beq			.stack_done
+
+		move.l		#custom,a6
+		move.l		(a2)+,bltcon0(a6)				H=bltcon0 L=bltcon1
+		move.l		(a2)+,bltafwm(a6)				H=bltafwm L=bltalwm
+		move.l		(a2)+,bltcpt(a6)
+		move.l		(a2)+,bltbpt(a6)
+		move.l		(a2)+,bltapt(a6)
+		move.l		(a2)+,bltdpt(a6)
+		move.l		(a2)+,bltcmod(a6)				H=bltcmod L=bltbmod
+		move.l		(a2)+,bltamod(a6)				H=bltamod L=bltdmod
+		move.w		(a2)+,bltsize(a6)				Starts Blit
+
+		move.l		(a2),br_stack_draw(a1)
+				
+*The queue has been completed/return
+.stack_done
+		rts
+*****************************************************************
+*
+*Name		Get_SBlit
+*
+*Function
+*			returns address of mem for sblit
+*Method
+*			-gets blitter resource
+*			-compare count
+*			-link blits
+*			-add bb_sizeof to current addr
+*
+*Parameters
+*			return a1 = addr | fail
+Get_SBlit:
+* a1 = blitter res
+			move.l		p_BlitRes(a0),a1
+
+			move.w		br_stack_size(a1),d7
+			sub.w		br_stack_count(a1),d7
+			blt			.dont_return
+
+			move.l		br_stack_new(a1),a2
+			beq			.top_stack
+			move.l		a2,a1
+			adda.l		#bb_SIZEOF,a1
+
+.next		move.l		a2,bb_next(a1)
+			rts
+
+*top of the stack
+.top_stack	move.l		br_stack_base_current(a1),a1
+			bra			.next
+*no more blits
+.dont_return
+			move.l		#0,a1
+			rts
+
+*****************************************************************
+*
+*Name		Push_SBlit
+*
+*Function
+*			update blit resource with new blit
+*Method
+*			-get blit res
+*			-inc count
+*			-update address
+*Parametrs
+*			a1 = blit
+Push_SBlit:
+* a2 = blitter res
+			move.l		p_BlitRes(a0),a2
+
+			addi.w		#1,br_stack_count(a2)
+
+			move.l		a1,br_stack_new(a2)
+
+			rts
+
+*****************************************************************
+*
+*Name		SBlit_Paste
+*
+*Function
+*			Adds a blitter paste to the blitter stack
+*Method
+*			-Gets next stack pos
+*			-calcs blit
+*			-puts on stack
+*Assumed
+*			-depth = 4
+*Parameters
+*			d0.w = x
+*			d1.w = y
+*			a6 = playfield
+*			a5 = object
+SBlit_Paste:
+			bsr			Get_SBlit
+
+			move.w		pf_ByteWidth(a6),d2
+			move.l		d2,d3
+			mulu.w		d1,d3
+			lsl.l		#2,d3				d3 = line addr
+
+			CLR_L		d4
+			move.w		d0,d4
+			lsr.w		#3,d4				d4 = row addr
+			
+			add.l		d4,d3
+			add.l		pf_Base(a6),d3
+			move.l		d3,bltdpt(a1)		d3 = dest addr
+
+			sub.w		bd_ByteWidth(a5),d2
+			move.w		d2,bltdmod(a1)
+
+			move.b		d0,d2
+			ror.w		#4,d2
+			andi.w		#$F000,d2
+			ori.w		#A_TO_D+SRCA+DEST,d2
+			move.w		d2,bltcon0(a1)
+			move.w		#0,bltcon1(a1)
+
+			move.l		bd_Data(a5),bltapt(a1)
+			
+			move.w		bd_bltsize(a5),bltsize(a1)
+
+			bra			Push_SBlit
+			
+
+*****************************************************************
+*																*
 *			Init Blitter Regs to Assumed Values					*
 *																*
 *****************************************************************
@@ -50,7 +254,7 @@ cliptop		equ			1
 clipright	equ			2
 clipbottom	equ			3
 
-DoBobs:	move.l		#custom,a6
+DoBobs:		move.l		#custom,a6
 			move.l		p_ForeGround(a0),a5
 
 			jsr			Clear_Bullets
