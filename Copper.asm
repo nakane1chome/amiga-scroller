@@ -175,10 +175,10 @@ MakeRainbow:
 			move.b		#1,d6
 .g			add.b		d4,d1
 			bcs.s		.gg
-			bra.s		.b
+			bra.s		.bl
 .gg			add.b		#g_step,1(a1)
 			move.b		#1,d6
-.b			add.b		d5,d2
+.bl			add.b		d5,d2
 			bcs.s		.bb
 			bra.s		.tstmsb
 .bb			add.b		#b_step,2(a1)
