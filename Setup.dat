@@ -1,0 +1,18 @@
+
+**
+**		$Id: Setup.dat 1.1 1998/05/18 07:31:41 phil Exp $
+**		$Source: Work:Project/scroller/src/RCS/Setup.dat $
+**
+**		Data for setup.asm
+**
+
+	SECTION		BSS,BSS_F
+
+machine:
+		ds.b     cd_SIZEOF
+		
+	SECTION		Fast,DATA_F
+	
+	even
+
+GfxName:	dc.b  "graphics.library",0
