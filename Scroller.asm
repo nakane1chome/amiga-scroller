@@ -7,13 +7,14 @@
 
 				Include		"Sprites.i"
 				Include		"Joystick.i"
-				Include		"Data.i"
 				Include		"Macros.i"
 
 				Include		"Sprites.asm"
 				Include		"Ints.asm"
 				Include		"Copper.asm"      
 				Include		"Blit.asm"
+
+				Include		"Data.i"
 
 		SECTION	Startup,CODE
 
@@ -755,13 +756,8 @@ Move_Player:	move.w		p_X(a0),d1
 
 .Y_Up			move.w		p_Y(a0),d0				;d1 p_X(a0), d3 p_VelocityY(a0)
 				add.w		d3,d0
-				bge			.yup_next				;not off the top of the map
 
-				move.w		#0,p_Y(a0)
-				move.w		#0,p_VelocityY(a0)
-				rts
-
-.yup_next		move.w		d0,d2
+				move.w		d0,d2
 				add.w		#TopEdge,d2
 				lsr.w		#blockshift,d2
 				mulu		l_Width(a3),d2
