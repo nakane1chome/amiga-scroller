@@ -1,10 +1,16 @@
-		incdir   "include:"
-		include "hardware/custom.i"
-		include "hardware/intbits.i"
-		include  "hardware/dmabits.i"
-		include "LVOS.i"
+*********************************************************************************
+*																				*
+*	Setup.asm																	*
+*																				*
+*********************************************************************************
 
-custom         equ      $dff000
+		incdir		"include:"
+		include		"hardware/custom.i"
+		include		"hardware/intbits.i"
+		include		"hardware/dmabits.i"
+		include		"LVOS.i"
+
+custom			equ			$dff000
 
 	SECTION		Setup,CODE_F
 
@@ -72,72 +78,104 @@ NoOS:
 
 		rts
 
-*******************************************************************
-
+*********************************************************************************
+*																				*
+*	Supervisor Mode																*
+*																				*
+*********************************************************************************
 Super:
-		move.l   #custom,a5
+		lea			CPU_Data,a6
+		movec		VBR,a0
+		move.l		a0,cd_VBR(a6)
+		bra			Save_IVT
+s01:	jsr			_main
+		bra			Restore_IVT
+s02:	rte
+
+*********************************************************************************
+*																				*
+*	Save IVT to Stack															*
+*																				*
+*********************************************************************************
+
+Save_IVT:
+		move.l		#custom,a5
+		move.l		CPU_Data,a6
 
 	;
 	;save inten & dmacon
 	;
-		move.w   intenar(a5),-(SP)
-		ori.w #$C000,(SP)
-		move.w   dmaconr(a5),-(SP)
-		ori.w #$8200,(SP)
+		move.w		intenar(a5),-(SP)
+		ori.w		#$C000,(SP)
+		move.w		dmaconr(a5),-(SP)
+		ori.w		#$8200,(SP)
 
 	;
 	;turn off interupts & dma
 	;
-		move.w   #$7fff,d0
-		move.w   d0,intena(a5)
-		move.w   d0,dmacon(a5)
+		move.w		#$7fff,d0
+		move.w		d0,intena(a5)
+		move.w		d0,dmacon(a5)
 
 	;
 	;save interupt vector table
 	;
-		move.l   #0,a0
-		moveq #$100/4-1,d0
-.svt  move.l   (a0)+,-(SP)
-		dbra  d0,.svt
+		move.l		cd_VBR(a6),a0
+		moveq		#$100/4-1,d0
+.svt	move.l		(a0)+,-(SP)
+		dbra		d0,.svt
 
-	;
-	;run program
-	;
-		jsr      _main
+		bra			s01
 
-		move.l   #custom,a5
+*********************************************************************************
+*																				*
+*	Restore IVT from Stack														*
+*																				*
+*********************************************************************************
+
+Restore_IVT:
+		move.l		#custom,a5
+		move.l		CPU_Data,a6
 
 	;
 	;turn off interupts & dma
 	;
-		move.w   #$7FFF,d0
-		move.w   d0,intena(a5)
-		move.w   d0,dmacon(a5)
+		move.w		#$7FFF,d0
+		move.w		d0,intena(a5)
+		move.w		d0,dmacon(a5)
 
 	;
 	;restore interupt vector table
 	;
-		move.l   #$100,a0
-		moveq #$100/4-1,d0
-.rvt  move.l   (SP)+,-(a0)
-		dbra  d0,.rvt
+		move.l		cd_VBR(a6),a0	
+		lea			$100(a0),a0
+		moveq		#$100/4-1,d0
+.rvt	move.l		(SP)+,-(a0)
+		dbra		d0,.rvt
 
 	;
 	;restore intena & dmacon
 	;
-		move.w   (SP)+,dmacon(a5)
-		move.w   (SP)+,intena(a5)
+		move.w		(SP)+,dmacon(a5)
+		move.w		(SP)+,intena(a5)
 
-		rte
+		bra			s02
+
+*********************************************************************************
+*																				*
+*	Data																		*
+*																				*
+*********************************************************************************
 
 	SECTION		Setup_BSS,BSS_F
 
-	STRUCTURE	Machine_Info,0
-		LONG	md_VBRBase
-		LABEL	md_SIZEOF
+	STRUCTURE CPU_DATA,0
+		LONG		cd_VBR
+		LABEL		cd_SIZEOF
 
-Machine_Data:
-		ds.b     md_SIZEOF
+CPU_Data:
+		ds.b     cd_SIZEOF
+		
 GfxBase:	ds.l  1
 OldView:	ds.l  1
 
